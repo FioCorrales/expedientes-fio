@@ -128,8 +128,8 @@ def generar_pdf_pro(datos, firma_array, fotos):
                 pdf.set_font("helvetica", "", 10)
                 pdf.cell(0, 10, f"Error al cargar {limpiar_texto(titulo)}", new_x="LMARGIN", new_y="NEXT")
 
-    # Retorno en modo binario directo (AQUÍ ESTÁ LA CORRECCIÓN)
-    return pdf.output()
+    # AQUÍ ESTÁ LA CORRECCIÓN MÁGICA: Convertimos estrictamente a bytes para Streamlit
+    return bytes(pdf.output())
 
 # ==========================================
 # INTERFAZ FRONTEND - STREAMLIT
