@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 from streamlit_drawable_canvas import st_canvas
@@ -307,5 +306,3 @@ if st.button("Guardar Expediente y Generar PDF", type="primary", use_container_w
                 file_name=f"Expediente_{nombre.replace(' ', '_')}_{datetime.date.today()}.pdf",
                 mime="application/pdf"
             )
-
-```
