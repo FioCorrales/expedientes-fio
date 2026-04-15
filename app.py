@@ -128,8 +128,8 @@ def generar_pdf_pro(datos, firma_array, fotos):
                 pdf.set_font("helvetica", "", 10)
                 pdf.cell(0, 10, f"Error al cargar {limpiar_texto(titulo)}", new_x="LMARGIN", new_y="NEXT")
 
-    # Retorno en modo binario
-    return pdf.output(dest='S').encode('latin-1')
+    # Retorno en modo binario directo (AQUÍ ESTÁ LA CORRECCIÓN)
+    return pdf.output()
 
 # ==========================================
 # INTERFAZ FRONTEND - STREAMLIT
@@ -209,7 +209,7 @@ if st.button("Guardar y Generar Expediente PDF", type="primary", use_container_w
             fotos_dict = {
                 "Cédula (Frente)": f_frente,
                 "Cédula (Dorso)": f_atras,
-                "Trabajo Acordado": f_tattoo,
+                "Trabajo Finalizado": f_tattoo,
                 "Permiso Legal de Menores": f_permiso
             }
 
