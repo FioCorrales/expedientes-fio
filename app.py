@@ -1,275 +1,231 @@
 import streamlit as st
-import numpy as np
-from PIL import Image
 from fpdf import FPDF
-import io
-import pytz
 from datetime import datetime
-import unicodedata
-from streamlit_drawable_canvas import st_canvas
+import pandas as pd
+import os
+from PIL import Image
+import io
 
-# ==========================================
-# 1. FUNCIONES DE UTILIDAD Y SANITIZACIÓN
-# ==========================================
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Fio Corrales Studio OS", page_icon="✒️", layout="centered")
 
-def limpiar_texto(texto):
-    """
-    Limpia el texto de tildes, caracteres especiales, y la ñ para evitar
-    que FPDF2 colapse por problemas de Unicode.
-    """
-    if not isinstance(texto, str):
-        texto = str(texto)
-    
-    # Reemplazo estricto solicitado
-    texto = texto.replace('₡', 'Colones')
-    texto = texto.replace('ñ', 'n').replace('Ñ', 'N')
-    
-    # Eliminar tildes y diacríticos
-    texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-    
-    return texto
+# --- ESTILOS CSS PRO ---
+st.markdown("""
+    <style>
+    .main { background-color: #121212; color: #E0E0E0; }
+    h1, h2, h3 { color: #D4AF37; font-family: 'Helvetica Neue', sans-serif; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab"] { background-color: #1E1E1E; border-radius: 4px 4px 0px 0px; padding: 10px 20px; }
+    .stTabs [aria-selected="true"] { background-color: #D4AF37; color: black !important; font-weight: bold; }
+    div[data-testid="stForm"] { border: 1px solid #D4AF37; padding: 20px; border-radius: 10px; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# ==========================================
-# 2. MOTOR BACKEND: CLASE Y GENERADOR PDF
-# ==========================================
-
-class PDFConsentimiento(FPDF):
+# --- CLASE PDF PERSONALIZADA ---
+class PDF(FPDF):
     def header(self):
-        # Membrete clínico y limpio
-        self.set_font('Helvetica', 'B', 16)
-        self.cell(0, 10, 'Fio Corrales Tattoo & Beauty Studio', border=False, ln=True, align='C')
-        
-        # Fecha y hora exacta de Costa Rica
-        self.set_font('Helvetica', 'I', 10)
-        cr_tz = pytz.timezone('America/Costa_Rica')
-        fecha_actual = datetime.now(cr_tz).strftime('%d/%m/%Y %H:%M:%S')
-        self.cell(0, 10, f'Fecha y Hora (CR): {fecha_actual}', border=False, ln=True, align='C')
+        self.set_font("helvetica", "B", 16)
+        self.cell(0, 10, "Fio Corrales Tattoo & Beauty Studio", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.set_font("helvetica", "", 10)
+        self.cell(0, 6, "Ciudad Quesada, Costa Rica | +506 62165089", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 6, "CONSENTIMIENTO INFORMADO PARA PROCEDIMIENTOS ESTÉTICOS", align="C", new_x="LMARGIN", new_y="NEXT")
         self.ln(5)
 
-    def footer(self):
-        # Número de página en el pie
-        self.set_y(-15)
-        self.set_font('Helvetica', 'I', 8)
-        self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
+    def chapter_title(self, title):
+        self.set_font("helvetica", "B", 11)
+        self.set_fill_color(200, 200, 200)
+        self.cell(0, 8, title, fill=True, new_x="LMARGIN", new_y="NEXT")
+        self.ln(2)
 
-def generar_pdf(datos, firma_array, fotos):
-    """
-    Genera el documento PDF procesando los datos sanitizados, la firma en RGBA
-    y las imágenes adjuntas, devolviendo los bytes puros para Streamlit.
-    """
-    pdf = PDFConsentimiento()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    
-    # --- PÁGINA 1: DATOS Y CUESTIONARIO ---
-    pdf.set_font('Helvetica', 'B', 12)
-    pdf.cell(0, 10, 'DATOS DEL CLIENTE', ln=True)
-    pdf.set_font('Helvetica', '', 11)
-    
-    for key, value in datos['personales'].items():
-        texto_limpio = limpiar_texto(f"{key}: {value}")
-        pdf.multi_cell(0, 8, texto_limpio)
+    def chapter_body(self, text):
+        self.set_font("helvetica", "", 10)
+        self.multi_cell(0, 5, text)
+        self.ln(3)
+
+# --- CABECERA ---
+st.title("✒️ Plataforma de Registro Legal")
+st.write("Complete el formulario. Los datos se encriptarán en la bitácora del estudio.")
+
+# --- FORMULARIO MULTI-PESTAÑA ---
+with st.form("registro_maestro"):
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 Datos", "⚕️ Salud", "📎 Archivos", "⚖️ Legal"])
+
+    # PESTAÑA 1: DATOS PERSONALES
+    with tab1:
+        st.subheader("Datos del Cliente")
+        nombre = st.text_input("Nombre Completo *")
+        col1, col2 = st.columns(2)
+        with col1:
+            cedula = st.text_input("Cédula / Pasaporte *")
+            telefono = st.text_input("Teléfono *")
+        with col2:
+            edad = st.number_input("Edad *", min_value=15, max_value=100, step=1)
+            fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+            st.text_input("Fecha", value=fecha_hoy, disabled=True)
         
-    pdf.ln(5)
-    pdf.set_font('Helvetica', 'B', 12)
-    pdf.cell(0, 10, 'CUESTIONARIO DE SALUD', ln=True)
-    pdf.set_font('Helvetica', '', 11)
-    
-    for key, value in datos['salud'].items():
-        texto_limpio = limpiar_texto(f"{key}: {value}")
-        pdf.multi_cell(0, 8, texto_limpio)
-
-    # --- TEXTO LEGAL ---
-    pdf.ln(10)
-    pdf.set_font('Helvetica', 'B', 11)
-    texto_legal = (
-        "Declaro que la informacion es veridica. Acepto los riesgos de bioseguridad "
-        "y autorizo el uso de fotografias para portafolio. En caso de dudas, "
-        "contactare al +506 62165089."
-    )
-    pdf.multi_cell(0, 6, texto_legal)
-    
-    # --- PROCESAMIENTO DE FIRMA (RGBA a RGB) ---
-    pdf.ln(15)
-    pdf.cell(0, 10, 'Firma del Cliente:', ln=True)
-    
-    try:
-        # Extraer alpha y poner fondo blanco
-        firma_img = Image.fromarray(firma_array.astype('uint8'), 'RGBA')
-        fondo_blanco = Image.new("RGB", firma_img.size, (255, 255, 255))
-        fondo_blanco.paste(firma_img, mask=firma_img.split()[3]) # Usar canal alpha como máscara
+        procedimiento = st.selectbox("Procedimiento a realizar:", 
+            ["Tatuaje", "Piercing", "Microblading/Cejas", "Delineado Ojos", "Labios"])
         
-        # Guardar en memoria
-        firma_io = io.BytesIO()
-        fondo_blanco.save(firma_io, format='PNG')
-        firma_io.seek(0)
+        st.subheader("Datos de Trazabilidad (Uso Interno)")
+        col3, col4 = st.columns(2)
+        with col3:
+            lote_tinta = st.text_input("Lote/Marca de Pigmento")
+        with col4:
+            lote_aguja = st.text_input("Lote de Aguja")
+
+    # PESTAÑA 2: CUESTIONARIO MÉDICO
+    with tab2:
+        st.subheader("Declaración de Salud y Aptitud")
+        st.info("Debe marcar las casillas para confirmar que NO posee las siguientes condiciones limitantes:")
+        cond_1 = st.checkbox("NO me encuentro bajo los efectos del alcohol, drogas, ni sustancias psicotrópicas. *")
+        cond_2 = st.checkbox("NO padezco de enfermedades infectocontagiosas no notificadas. *")
+        cond_3 = st.checkbox("NO estoy embarazada ni en periodo de lactancia. *")
+
+        st.markdown("---")
+        st.write("**Marque si padece o ha padecido lo siguiente:**")
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            diabetes = st.checkbox("Diabetes")
+            epilepsia = st.checkbox("Epilepsia")
+            corazon = st.checkbox("Problemas cardíacos")
+            hemofilia = st.checkbox("Hemofilia / Problemas coagulación")
+        with col_m2:
+            alergias = st.checkbox("Alergias a metales, látex o pigmentos")
+            queloide = st.checkbox("Cicatrización queloide")
+            piel = st.checkbox("Afecciones de la piel en la zona")
         
-        # Insertar en PDF (ancho 80mm)
-        pdf.image(firma_io, w=80)
-        pdf.cell(80, 0, '________________________________', ln=True)
-    except Exception as e:
-        pdf.cell(0, 10, f'[Error al procesar la firma: {str(e)}]', ln=True)
+        detalles_medicos = st.text_area("Detalles adicionales sobre su salud (Opcional)")
 
-    # --- PÁGINAS ANEXAS: EVIDENCIA ---
-    if fotos:
-        pdf.add_page()
-        pdf.set_font('Helvetica', 'B', 14)
-        pdf.cell(0, 10, 'ANEXOS: EVIDENCIA FOTOGRAFICA', ln=True)
+    # PESTAÑA 3: ARCHIVOS Y EVIDENCIA
+    with tab3:
+        st.subheader("Carga de Documentación")
+        st.write("Formatos permitidos: JPG, PNG.")
+        foto_diseno = st.file_uploader("Diseño / Referencia a realizar", type=["jpg", "jpeg", "png"])
         
-        for nombre_foto, archivo in fotos.items():
-            if archivo is not None:
-                try:
-                    # Redimensionamiento temporal para evitar desbordamiento A4
-                    img = Image.open(archivo)
-                    img.thumbnail((450, 450)) # Tamaño seguro
-                    
-                    # Convertir a RGB por si acaso (ej. PNG con transparencia o RGBA)
-                    if img.mode in ('RGBA', 'P'):
-                        img = img.convert('RGB')
-                        
-                    img_io = io.BytesIO()
-                    img.save(img_io, format='JPEG')
-                    img_io.seek(0)
-                    
-                    pdf.ln(5)
-                    pdf.set_font('Helvetica', 'B', 11)
-                    pdf.cell(0, 10, limpiar_texto(nombre_foto), ln=True)
-                    pdf.image(img_io, w=100) # Ancho controlado
-                    pdf.ln(5)
-                except Exception as e:
-                    pdf.set_font('Helvetica', '', 10)
-                    pdf.cell(0, 10, f'[Error al procesar la imagen {nombre_foto}: {str(e)}]', ln=True)
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            id_frente = st.file_uploader("Cédula - Frente *", type=["jpg", "jpeg", "png"])
+        with col_f2:
+            id_atras = st.file_uploader("Cédula - Atrás *", type=["jpg", "jpeg", "png"])
 
-    # Retorno estricto de bytes puro para Streamlit Download Button
-    return bytes(pdf.output())
+        if edad < 18:
+            st.error("⚠️ REQUISITO PARA MENORES DE EDAD")
+            permiso_padre = st.file_uploader("Cédula y Permiso Firmado del Padre/Tutor *", type=["jpg", "jpeg", "png"])
 
-# ==========================================
-# 3. INTERFAZ FRONTEND (STREAMLIT)
-# ==========================================
-
-st.set_page_config(page_title="Consentimiento - Fio Corrales", layout="centered")
-
-# Encabezado Clínico
-st.markdown("<h1 style='text-align: center; color: #2C3E50;'>Fio Corrales Tattoo & Beauty Studio</h1>", unsafe_allow_html=True)
-st.markdown("<h4 style='text-align: center; color: #7F8C8D;'>Expediente y Consentimiento Informado</h4>", unsafe_allow_html=True)
-st.divider()
-
-# Formulario de Datos Personales (2 Columnas)
-st.subheader("Datos Personales")
-col1, col2 = st.columns(2)
-
-with col1:
-    nombre = st.text_input("Nombre completo")
-    cedula = st.text_input("Cédula / ID")
-    fecha_nac = st.date_input("Fecha de nacimiento")
-
-with col2:
-    whatsapp = st.text_input("WhatsApp (+506)")
-    zona_tatuar = st.text_input("Zona a tatuar / trabajar")
-    precio = st.text_input("Precio Pactado (₡)")
-
-st.divider()
-
-# Cuestionario de Salud
-st.subheader("Cuestionario de Salud")
-c1, c2 = st.columns(2)
-with c1:
-    enf_infecto = st.radio("¿Padece enfermedades infectocontagiosas?", ["No", "Sí"])
-    coagulacion = st.radio("¿Problemas de coagulación o diabetes?", ["No", "Sí"])
-with c2:
-    alergias = st.radio("¿Alergias severas (látex, tintas, anestesia)?", ["No", "Sí"])
-    embarazo = st.radio("¿Embarazo o lactancia?", ["No", "Sí"])
-
-st.divider()
-
-# Módulos de Carga de Archivos
-st.subheader("Evidencia Fotográfica")
-st.caption("Formatos aceptados: JPG, JPEG, PNG")
-foto_frente = st.file_uploader("1. Frente de la Cédula (Obligatorio)", type=["jpg", "jpeg", "png"])
-foto_dorso = st.file_uploader("2. Dorso de la Cédula (Obligatorio)", type=["jpg", "jpeg", "png"])
-foto_trabajo = st.file_uploader("3. Trabajo Finalizado (Obligatorio)", type=["jpg", "jpeg", "png"])
-foto_menor = st.file_uploader("4. Permiso de menores (Opcional)", type=["jpg", "jpeg", "png"])
-
-st.divider()
-
-# Firma Digital
-st.subheader("Firma del Cliente")
-st.caption("Dibuje su firma en el recuadro blanco:")
-canvas_result = st_canvas(
-    fill_color="rgba(255, 255, 255, 1)",
-    stroke_width=2,
-    stroke_color="#000000",
-    background_color="#FFFFFF",
-    height=150,
-    drawing_mode="freedraw",
-    key="canvas",
-)
-
-st.divider()
-
-# ==========================================
-# 4. LÓGICA DE VALIDACIÓN Y GENERACIÓN
-# ==========================================
-
-if st.button("Generar Expediente PDF", use_container_width=True, type="primary"):
-    
-    # 1. Validar campos obligatorios de texto
-    if not all([nombre, cedula, whatsapp, zona_tatuar, precio]):
-        st.error("⚠️ Por favor, complete todos los campos de texto obligatorios.")
-    
-    # 2. Validar fotos obligatorias
-    elif not all([foto_frente, foto_dorso, foto_trabajo]):
-        st.error("⚠️ Faltan fotografías obligatorias (Cédula frente/dorso o Trabajo finalizado).")
-    
-    # 3. Validar firma (Comprobar si el array está vacío o si todos los pixeles son 0)
-    elif canvas_result.image_data is None or np.sum(canvas_result.image_data) == 0:
-        st.error("⚠️ La firma es obligatoria.")
+    # PESTAÑA 4: LEGAL Y FIRMA
+    with tab4:
+        st.subheader("Consentimiento y Aprobación")
+        st.write("He revisado y aprobado el diseño, tamaño, ortografía (en caso de letras) y ubicación de la pieza.")
+        st.write("Certifico que he recibido la Guía de Cuidados y me comprometo a seguirla.")
         
+        autoriza_imagen = st.radio("Autorización de Imagen (Redes Sociales):", ["Sí autorizo", "NO autorizo"], horizontal=True)
+        acepta_terminos = st.checkbox("Confirmo que he leído y comprendido toda la información, y acepto los riesgos. *")
+        
+        submit_btn = st.form_submit_button("VALIDAR Y GENERAR DOCUMENTO OFICIAL")
+
+# --- LÓGICA DE PROCESAMIENTO ---
+if submit_btn:
+    # Validaciones Estrictas
+    faltan_datos = not nombre or not cedula or not telefono
+    faltan_checks = not cond_1 or not cond_2 or not cond_3 or not acepta_terminos
+    faltan_fotos = not id_frente or not id_atras
+    es_menor_sin_permiso = edad < 18 and not permiso_padre
+
+    if faltan_datos:
+        st.error("❌ Faltan datos personales obligatorios (*).")
+    elif faltan_checks:
+        st.error("❌ Debe aceptar las condiciones de salud y los términos legales (*).")
+    elif faltan_fotos:
+        st.error("❌ Es obligatorio subir las fotografías de la cédula.")
+    elif es_menor_sin_permiso:
+        st.error("❌ Los menores de edad requieren el documento de permiso del tutor.")
     else:
-        with st.spinner("Procesando documento..."):
-            # Construir diccionarios
-            datos_generales = {
-                "personales": {
-                    "Nombre": nombre,
-                    "Cedula": cedula,
-                    "Fecha de Nacimiento": str(fecha_nac),
-                    "WhatsApp": whatsapp,
-                    "Zona": zona_tatuar,
-                    "Precio": precio
-                },
-                "salud": {
-                    "Enfermedades infectocontagiosas": enf_infecto,
-                    "Problemas coagulacion/diabetes": coagulacion,
-                    "Alergias": alergias,
-                    "Embarazo/lactancia": embarazo
-                }
-            }
-            
-            diccionario_fotos = {
-                "Frente de la Cedula": foto_frente,
-                "Dorso de la Cedula": foto_dorso,
-                "Trabajo Finalizado": foto_trabajo,
-                "Permiso de Menores": foto_menor # Puede ser None
-            }
-            
-            # Invocar al motor backend
-            try:
-                pdf_bytes = generar_pdf(
-                    datos=datos_generales,
-                    firma_array=canvas_result.image_data,
-                    fotos=diccionario_fotos
-                )
-                
-                st.success("✅ ¡Expediente generado con éxito!")
-                
-                # Descarga sin errores (retorna bytes crudos)
-                st.download_button(
-                    label="📥 Descargar PDF Legal",
-                    data=pdf_bytes,
-                    file_name=f"Expediente_{nombre.replace(' ', '_')}.pdf",
-                    mime="application/pdf",
-                    type="primary"
-                )
-            except Exception as e:
-                st.error(f"❌ Error crítico al generar el PDF: {str(e)}")
+        # Generación del PDF Exacto al Original
+        pdf = PDF()
+        pdf.add_page()
+        
+        # DATOS
+        pdf.chapter_title("DATOS DEL CLIENTE")
+        pdf.chapter_body(f"Nombre Completo: {nombre}\nCédula / Pasaporte: {cedula}\nTeléfono: {telefono}\nEdad: {edad} años\nFecha: {fecha_hoy}\nProcedimiento: {procedimiento}")
+        
+        # I. SALUD
+        pdf.chapter_title("I. DECLARACIÓN DE SALUD Y APTITUD")
+        padecimientos = []
+        if diabetes: padecimientos.append("Diabetes")
+        if epilepsia: padecimientos.append("Epilepsia")
+        if corazon: padecimientos.append("Problemas Cardíacos")
+        if hemofilia: padecimientos.append("Hemofilia/Coagulación")
+        if alergias: padecimientos.append("Alergias (metales/pigmentos)")
+        if queloide: padecimientos.append("Cicatrización Queloide")
+        if piel: padecimientos.append("Afecciones de piel")
+        
+        pad_str = ", ".join(padecimientos) if padecimientos else "Ninguno reportado."
+        
+        pdf.chapter_body(
+            "Declaro bajo juramento que:\n"
+            "1. NO me encuentro bajo efectos de alcohol, drogas ni sustancias psicotrópicas.\n"
+            "2. NO padezco enfermedades infectocontagiosas no notificadas.\n"
+            "3. NO estoy embarazada ni en periodo de lactancia.\n"
+            f"Padecimientos marcados: {pad_str}\n"
+            f"Detalles adicionales: {detalles_medicos}"
+        )
 
+        # II. RIESGOS
+        pdf.chapter_title("II. INFORMACIÓN SOBRE EL PROCEDIMIENTO Y RIESGOS")
+        pdf.chapter_body(
+            "Entiendo que el procedimiento es una modificación permanente. Implica el uso de agujas estériles "
+            "y desechables, conllevando un riesgo mínimo de infección si no se siguen los cuidados. "
+            "Existe posibilidad de reacciones alérgicas a pigmentos o materiales. "
+            "He revisado y aprobado el diseño, tamaño, ortografía y ubicación antes de iniciar."
+        )
+
+        # III. CUIDADOS
+        pdf.chapter_title("III. COMPROMISO DE CUIDADOS POSTERIORES")
+        pdf.chapter_body(
+            "Certifico que he recibido la Guía de Cuidados y me comprometo a seguir las instrucciones al pie de la letra. "
+            "Entiendo que la mala manipulación exonera al estudio de cualquier responsabilidad."
+        )
+
+        # IV. IMAGEN
+        pdf.chapter_title("IV. AUTORIZACIÓN DE IMAGEN")
+        pdf.chapter_body(f"Uso de material para redes sociales y portafolio: {autoriza_imagen}")
+
+        # V. FIRMAS
+        pdf.chapter_title("V. FIRMAS DE CONFORMIDAD")
+        pdf.ln(15)
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(90, 10, "_________________________________", align="C")
+        pdf.cell(90, 10, "_________________________________", align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(90, 5, "Firma del Cliente", align="C")
+        pdf.cell(90, 5, "Firma del Artista / Técnico", align="C", new_x="LMARGIN", new_y="NEXT")
+        
+        # Guardar Documento
+        os.makedirs("registros", exist_ok=True)
+        pdf_filename = f"registros/Consentimiento_{cedula}_{datetime.now().strftime('%Y%m%d%H%M')}.pdf"
+        pdf.output(pdf_filename)
+
+        # Registro en Bitácora (Base de datos CSV)
+        nueva_fila = {
+            "Fecha": fecha_hoy,
+            "Cédula": cedula,
+            "Nombre": nombre,
+            "Procedimiento": procedimiento,
+            "Lote Tinta": lote_tinta,
+            "Lote Aguja": lote_aguja,
+            "Autoriza Imagen": autoriza_imagen,
+            "Archivo PDF": pdf_filename
+        }
+        df_nueva = pd.DataFrame([nueva_fila])
+        archivo_csv = "registros/bitacora_sanitaria.csv"
+        
+        if not os.path.exists(archivo_csv):
+            df_nueva.to_csv(archivo_csv, index=False, encoding='utf-8')
+        else:
+            df_nueva.to_csv(archivo_csv, mode='a', header=False, index=False, encoding='utf-8')
+
+        st.success("✅ Registro completado exitosamente. Cumplimiento normativo alcanzado.")
+        st.balloons()
+        
+        # Botón para descargar el PDF
+        with open(pdf_filename, "rb") as f:
+            st.download_button("📥 Descargar Consentimiento Oficial", f, file_name=f"Consentimiento_{nombre}.pdf", mime="application/pdf")
