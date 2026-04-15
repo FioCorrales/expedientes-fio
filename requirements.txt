@@ -1,9 +1,6 @@
 streamlit
-pandas
 streamlit-drawable-canvas
 fpdf2
 Pillow
-numpy
-gspread
-oauth2client
 pytz
+numpy
