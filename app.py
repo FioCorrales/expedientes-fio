@@ -44,7 +44,6 @@ class PDF(FPDF):
 
 # --- CABECERA Y LOGO ---
 try:
-    # Carga el logo centrado
     logo = Image.open("IMG-20260408-WA0028.jpg")
     st.image(logo, width=250)
 except FileNotFoundError:
@@ -102,15 +101,16 @@ detalles_medicos = st.text_area("Notas médicas adicionales (Opcional)")
 
 # --- SECCIÓN 3: ARCHIVOS ---
 st.markdown('<h3 class="seccion-titulo">📎 Documentación Visual</h3>', unsafe_allow_html=True)
-foto_diseno = st.file_uploader("Diseño de referencia", type=["jpg", "png"])
+foto_diseno = st.file_uploader("Diseño de referencia", type=["jpg", "png", "jpeg"])
 col_f1, col_f2 = st.columns(2)
 with col_f1:
-    id_frente = st.file_uploader("Cédula - Frente *", type=["jpg", "png"])
+    id_frente = st.file_uploader("Cédula - Frente *", type=["jpg", "png", "jpeg"])
 with col_f2:
-    id_atras = st.file_uploader("Cédula - Atrás *", type=["jpg", "png"])
+    id_atras = st.file_uploader("Cédula - Atrás *", type=["jpg", "png", "jpeg"])
 
+permiso_padre = None
 if edad < 18:
-    permiso_padre = st.file_uploader("Permiso del Tutor y Cédula (Obligatorio menores) *", type=["jpg", "png", "pdf"])
+    permiso_padre = st.file_uploader("Permiso del Tutor y Cédula (Obligatorio menores) *", type=["jpg", "png", "jpeg"])
 
 
 # --- SECCIÓN 4: LEGAL Y FIRMA DIGITAL ---
@@ -120,14 +120,13 @@ autoriza_imagen = st.radio("Autorización de Imagen:", ["Sí autorizo", "NO auto
 
 st.write("**Firme en el recuadro blanco de abajo:**")
 
-# COMPONENTE DE FIRMA OPTIMIZADO
 canvas_result = st_canvas(
     fill_color="rgba(255, 255, 255, 0.3)",
     stroke_width=3,
     stroke_color="#000000",
     background_color="#FFFFFF",
     height=150,
-    width=320, # Ancho seguro para la mayoría de teléfonos
+    width=320, 
     drawing_mode="freedraw",
     key="canvas",
 )
@@ -136,23 +135,26 @@ st.caption("Use su dedo o lápiz óptico para firmar.")
 acepta_terminos = st.checkbox("Confirmo que he leído y acepto los términos. *")
 
 st.markdown("<br>", unsafe_allow_html=True)
-
-# Botón de envío
 submit_btn = st.button("VALIDAR Y GENERAR DOCUMENTO OFICIAL")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
 # --- PROCESAMIENTO ---
 if submit_btn:
-    # Validaciones
     if not nombre or not cedula or not acepta_terminos:
         st.error("❌ Por favor complete los campos obligatorios (*) y acepte los términos al final.")
     elif canvas_result.image_data is None or np.sum(canvas_result.image_data) == 0:
         st.error("❌ Debe firmar en el recuadro blanco antes de generar el documento.")
     else:
+        # Lista para limpiar archivos temporales al final
+        archivos_temporales = []
+
         # 1. Procesar la Firma
         firma_array = canvas_result.image_data
         firma_image = Image.fromarray(firma_array.astype('uint8'), 'RGBA')
+        temp_firma = "temp_firma.png"
+        firma_image.save(temp_firma)
+        archivos_temporales.append(temp_firma)
         
         # 2. Generar PDF
         pdf = PDF()
@@ -173,16 +175,37 @@ if submit_btn:
         # IV. ESPACIO DE FIRMA
         pdf.chapter_title("IV. FIRMA DIGITAL")
         pdf.ln(5)
-        
-        # Guardar firma temporalmente
-        temp_firma = "temp_firma.png"
-        firma_image.save(temp_firma)
-        
-        # Insertar firma en el PDF
         pdf.image(temp_firma, x=55, y=pdf.get_y(), w=100)
         pdf.ln(25)
         pdf.cell(0, 10, "_________________________________", align="C", new_x="LMARGIN", new_y="NEXT")
         pdf.cell(0, 5, f"Firma Digital de {nombre}", align="C")
+
+        # V. ANEXOS VISUALES (Cédulas y Diseño)
+        anexos = [
+            (foto_diseno, "Diseño de Referencia"),
+            (id_frente, "Cédula de Identidad - Frente"),
+            (id_atras, "Cédula de Identidad - Reverso")
+        ]
+        if edad < 18 and permiso_padre is not None:
+            anexos.append((permiso_padre, "Permiso de Tutor Legal"))
+
+        for archivo, titulo in anexos:
+            if archivo is not None:
+                pdf.add_page()
+                pdf.chapter_title(f"ANEXO: {titulo}")
+                
+                # Optimizar imagen para PDF
+                img = Image.open(archivo)
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                img.thumbnail((800, 800)) # Mantiene resolución pero reduce peso
+                
+                temp_img_name = f"temp_{titulo.replace(' ', '')}.jpg"
+                img.save(temp_img_name, "JPEG")
+                archivos_temporales.append(temp_img_name)
+                
+                pdf.image(temp_img_name, x=30, w=150)
 
         # Guardar y Registrar
         os.makedirs("registros", exist_ok=True)
@@ -193,11 +216,13 @@ if submit_btn:
         nueva_fila = {"Fecha": datetime.now(), "Cédula": cedula, "Nombre": nombre, "Archivo": pdf_filename}
         pd.DataFrame([nueva_fila]).to_csv("registros/bitacora.csv", mode='a', header=not os.path.exists("registros/bitacora.csv"), index=False)
 
-        st.success("✅ Documento generado con firma digital y registrado en bitácora.")
+        st.success("✅ Documento generado con firma digital, anexos y registrado en bitácora.")
         st.balloons()
-        with open(pdf_filename, "rb") as f:
-            st.download_button("📥 Descargar PDF Firmado", f, file_name=f"Consentimiento_{nombre}.pdf")
         
-        # Limpieza
-        if os.path.exists(temp_firma):
-            os.remove(temp_firma)
+        with open(pdf_filename, "rb") as f:
+            st.download_button("📥 Descargar PDF Final (Con Anexos)", f, file_name=f"Consentimiento_Oficial_{nombre}.pdf")
+        
+        # Limpieza de todos los archivos temporales de imágenes
+        for temp_file in archivos_temporales:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
