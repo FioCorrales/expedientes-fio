@@ -125,7 +125,7 @@ st.markdown('<h3 class="seccion-titulo">⚖️ Firma y Consentimiento</h3>', uns
 st.write("**Declaración de Compromiso:**")
 st.write("1. Declaro bajo juramento que toda la información brindada es la verdad.")
 st.write("2. He recibido las instrucciones sobre los cuidados posteriores de forma clara.")
-st.write("3. Acepto los riesgos inherentes al procedimiento (infección, reacciones alérgicas).")
+st.write("3. Acepto los riesgos inherentes al procedimiento.")
 st.write("4. He revisado y aprobado el diseño, ubicación y ortografía.")
 
 autoriza_imagen = st.radio("Autorización de Imagen y Redes Sociales:", ["Sí autorizo", "NO autorizo"], horizontal=True)
