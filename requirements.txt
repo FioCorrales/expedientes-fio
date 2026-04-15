@@ -1,6 +1,4 @@
 streamlit
-streamlit-drawable-canvas
 fpdf2
+pandas
 Pillow
-pytz
-numpy
